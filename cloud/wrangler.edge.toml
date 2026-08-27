@@ -1,0 +1,24 @@
+# 9router-cloud — EDGE GATEWAY worker (default routes + /v1/embeddings LLM proxy).
+# This entry reuses the open-sse engine, so it must be bundled first (build.mjs):
+#   npm run deploy:edge        (build + deploy)
+#   npm run dev:edge           (build + local dev)
+# Requires the same D1 database as the default worker.
+
+name = "9router-cloud-edge"
+main = "dist/index.edge.js"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Build the edge bundle (esbuild + shims) before wrangler bundles/deploys.
+[build]
+command = "node build.mjs"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "9router-cloud"
+database_id = "00000000-0000-0000-0000-000000000000" # TODO: replace with your database_id
+migrations_dir = "migrations"
+
+[vars]
+SERVICE_NAME = "9router-cloud-edge"

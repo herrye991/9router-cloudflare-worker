@@ -86,3 +86,11 @@ graphify-out/*
 .codegraph/
 .PR/
 .next-analyze/*
+
+# Cloudflare worker (cloud/)
+cloud/node_modules/
+cloud/dist/
+cloud/.wrangler/
+cloud/.dev.vars
+.wrangler/
+.dev.vars

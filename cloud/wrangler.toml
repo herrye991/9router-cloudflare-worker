@@ -1,0 +1,34 @@
+# 9router-cloud — default worker (dependency-light: health + cloud-sync + auth).
+# Deploy with `wrangler deploy` from this directory. For the full edge gateway
+# (adds the /v1/embeddings LLM proxy via the open-sse engine) use wrangler.edge.toml.
+
+name = "9router-cloud"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# ── D1 database ──────────────────────────────────────────────────────────────
+# 1. Create once:   npm run db:create        (prints a database_id)
+# 2. Paste the id into database_id below.
+# 3. Apply schema:  npm run db:migrate       (remote) or db:migrate:local (dev)
+[[d1_databases]]
+binding = "DB"
+database_name = "9router-cloud"
+database_id = "00000000-0000-0000-0000-000000000000" # TODO: replace with your database_id
+migrations_dir = "migrations"
+
+# ── Optional KV namespace (reserved) ─────────────────────────────────────────
+# The D1 storage layer is the source of truth; KV is not required. Uncomment to bind.
+# [[kv_namespaces]]
+# binding = "KV"
+# id = "00000000000000000000000000000000"
+
+# Non-secret runtime config goes under [vars]. Secrets (e.g. API_KEY_SECRET) must NOT
+# be committed here — set them with `wrangler secret put API_KEY_SECRET` (prod) or in
+# `.dev.vars` (local dev, see .dev.vars.example).
+[vars]
+SERVICE_NAME = "9router-cloud"
+
+# [observability]
+# enabled = true
