@@ -1,0 +1,136 @@
+name: Cloudflare Worker
+
+# CI/CD for cloud/ (the 9Router Cloudflare Worker + D1).
+#   - Validates worker sources (syntax) + the embeddings contract test on every change.
+#   - Deploys via cloudflare/wrangler-action on push to main/master (never on PRs,
+#     so secrets are never exposed to forks) or via manual dispatch.
+#
+# Required repo configuration (Settings → Secrets and variables → Actions):
+#   Secrets:   CLOUDFLARE_API_TOKEN   (Workers edit token)
+#              CLOUDFLARE_ACCOUNT_ID
+#              API_KEY_SECRET         (MUST match the app's API_KEY_SECRET)
+#   Variables: D1_DATABASE_ID         (from `cd cloud && npm run db:create`)
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "cloud/**"
+      - ".github/workflows/cloudflare-worker.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "cloud/**"
+      - ".github/workflows/cloudflare-worker.yml"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which worker to deploy (default = dependency-light sync/auth; edge = adds /v1/embeddings via open-sse)"
+        type: choice
+        options: [default, edge]
+        default: default
+      applyMigrations:
+        description: "Apply D1 migrations to the remote DB before deploying"
+        type: boolean
+        default: false
+
+concurrency:
+  group: cloudflare-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Syntax-check worker sources
+        working-directory: cloud
+        run: |
+          set -e
+          find src shims -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
+            | while IFS= read -r -d '' f; do node --check "$f"; done
+          node --check build.mjs
+          echo "syntax OK"
+
+      - name: Install test deps
+        working-directory: tests
+        run: npm install --no-audit --no-fund
+
+      - name: Run cloud worker contract tests
+        working-directory: tests
+        run: npx vitest run unit/embeddings.cloud.test.js
+
+  deploy:
+    name: Deploy
+    needs: test
+    # Never deploy from a PR (secrets must not reach forked code).
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # The default worker needs no build; the edge build bundles open-sse via esbuild.
+      - name: Install worker deps (edge build only)
+        if: inputs.target == 'edge'
+        run: npm install --no-audit --no-fund
+
+      # wrangler.toml in git keeps a placeholder UUID; inject the real D1 database_id.
+      - name: Configure D1 database id
+        env:
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+        run: |
+          if [ -z "$D1_DATABASE_ID" ]; then
+            echo "::error::D1_DATABASE_ID is not set. Create the DB (cd cloud && npm run db:create), then add an Actions variable named D1_DATABASE_ID with the database_id."
+            exit 1
+          fi
+          sed -i "s/00000000-0000-0000-0000-000000000000/$D1_DATABASE_ID/g" wrangler.toml wrangler.edge.toml
+
+      # Migrations are deliberate — only run them when explicitly requested.
+      # (If this ever hangs on an interactive prompt, run `npm run db:migrate` locally instead.)
+      - name: Apply D1 migrations (remote)
+        if: inputs.applyMigrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloud
+          command: d1 migrations apply DB --remote
+
+      - name: Deploy worker (default)
+        if: inputs.target != 'edge'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloud
+          command: deploy
+          secrets: |
+            API_KEY_SECRET
+        env:
+          API_KEY_SECRET: ${{ secrets.API_KEY_SECRET }}
+
+      - name: Deploy edge gateway
+        if: inputs.target == 'edge'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloud
+          command: deploy --config wrangler.edge.toml
+          secrets: |
+            API_KEY_SECRET
+        env:
+          API_KEY_SECRET: ${{ secrets.API_KEY_SECRET }}
