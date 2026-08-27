@@ -1,0 +1,39 @@
+# 9Router FULL APP (dashboard + API) as a Cloudflare Worker, built by
+# @opennextjs/cloudflare. This is SEPARATE from the companion sync/proxy worker in
+# cloud/ (which has its own cloud/wrangler.toml).
+#
+#   npm run build:cf     # opennextjs-cloudflare build → .open-next/
+#   npm run preview:cf   # local preview (workerd)
+#   npm run deploy:cf    # build + deploy
+#
+# `main` points at the OpenNext build output — run `npm run build:cf` before
+# `wrangler deploy`/`dev` against this file.
+
+name = "9router-app"
+main = ".open-next/worker.js"
+compatibility_date = "2025-06-01"
+# nodejs_compat is required — the app uses node:crypto/buffer/stream/path/etc.
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets (JS/CSS/images) produced by the OpenNext build.
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Non-secret runtime config. Secrets go in .dev.vars (local) or `wrangler secret put`.
+# The app expects these (see .env.example): JWT_SECRET, INITIAL_PASSWORD,
+# API_KEY_SECRET, MACHINE_ID_SALT — set them as secrets, NOT here.
+[vars]
+# NEXT_PUBLIC_BASE_URL = "https://9router-app.<your-subdomain>.workers.dev"
+
+# Optional: observability for debugging the edge build.
+# [observability]
+# enabled = true
+
+# D1 binding — RESERVED. Wiring the app's DB to D1 requires making src/lib/db repos
+# async (they are synchronous today; D1 is async-only). Until then the app falls back
+# to sql.js, which is ephemeral at the edge (state is lost across worker isolates).
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "9router-app"
+# database_id = "00000000-0000-0000-0000-000000000000" # replace after `wrangler d1 create`

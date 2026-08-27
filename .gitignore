@@ -94,3 +94,6 @@ cloud/.wrangler/
 cloud/.dev.vars
 .wrangler/
 .dev.vars
+
+# OpenNext / Cloudflare app-worker build output
+.open-next/
