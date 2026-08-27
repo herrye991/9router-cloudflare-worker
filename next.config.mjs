@@ -9,10 +9,15 @@ const tracingRoot = process.env.NEXT_TRACING_ROOT_MODE === "workspace"
   : projectRoot;
 const proxyClientMaxBodySize = process.env.NINEROUTER_PROXY_CLIENT_MAX_BODY_SIZE || "128mb";
 
+// True when building for Cloudflare Workers via @opennextjs/cloudflare (npm run build:cf).
+// The edge build must NOT use the Node "standalone" output, and Node-only deps are stubbed.
+const isCfBuild = process.env.CF_WORKER_BUILD === "true";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  output: "standalone",
+  // "standalone" is for the Node/Docker server only; OpenNext/CF needs the default build.
+  ...(!isCfBuild ? { output: "standalone" } : {}),
   // `open` must stay external. It derives its own directory from `import.meta.url`, and
   // webpack replaces that with the absolute path of the BUILD machine as a string literal.
   // A release built on macOS therefore ships `file:///Users/.../open/index.js`, which
@@ -20,7 +25,9 @@ const nextConfig = {
   // letter). That throw happens at module scope, so every consumer of `open` dies on
   // import — including xAI/Grok token refresh, which loads the OAuth service that imports
   // it. Keeping it external preserves the real `import.meta.url` at runtime.
-  serverExternalPackages: ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open"],
+  // Node build: keep these external (see note above re: `open`). CF build: externalize
+  // nothing — Node-only deps are webpack-aliased to open-next/shims/node-stub.js instead.
+  serverExternalPackages: isCfBuild ? [] : ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open"],
   turbopack: {
     root: tracingRoot
   },
@@ -47,6 +54,23 @@ const nextConfig = {
         ...config.resolve.fallback,
         fs: false,
         path: false,
+      };
+    }
+    // CF/edge build: stub Node-only modules so the server bundle compiles for Workers.
+    // These throw a clear, catchable error if actually invoked at the edge.
+    if (isCfBuild) {
+      const edgeStub = join(projectRoot, "open-next/shims/node-stub.js");
+      config.resolve.alias = {
+        ...(config.resolve.alias || {}),
+        child_process: edgeStub,
+        "node:child_process": edgeStub,
+        "node:sqlite": edgeStub,
+        "bun:sqlite": edgeStub,
+        "better-sqlite3": edgeStub,
+        "node-machine-id": edgeStub,
+        open: edgeStub,
+        "socks-proxy-agent": edgeStub,
+        "got-scraping": edgeStub,
       };
     }
     // Exclude non-source dirs from watcher to reduce inotify load

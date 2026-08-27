@@ -9,6 +9,20 @@
   Auth reuses the app's `sk-{machineId}-{keyId}-{crc8}` key format (set
   `API_KEY_SECRET` to match). Implements the `cloud/src/handlers/embeddings.js`
   contract referenced by `tests/unit/embeddings.cloud.test.js`.
+- **CI/CD**: add `.github/workflows/cloudflare-worker.yml` — validates `cloud/`
+  (syntax + the embeddings contract test) on every change, then deploys via
+  `cloudflare/wrangler-action` on push to main/master (never on PRs). Injects
+  `D1_DATABASE_ID` at deploy time; manual dispatch can target the edge gateway and/or
+  apply D1 migrations. Requires `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`/
+  `API_KEY_SECRET` secrets + `D1_DATABASE_ID` variable.
+- **Cloudflare (full app)**: scaffold deploying the whole Next.js app (dashboard + API)
+  to a Worker via `@opennextjs/cloudflare` — `open-next.config.ts`, root `wrangler.toml`,
+  a guarded `CF_WORKER_BUILD` branch in `next.config.mjs` (drops `standalone`, aliases
+  Node-only deps to `open-next/shims/node-stub.js`), `build:cf`/`preview:cf`/`deploy:cf`
+  scripts, and `.github/workflows/cloudflare-app.yml`. **Degraded at the edge** (tunnels,
+  MITM, CLI auto-config, OAuth file import, machine-id, native SQLite unavailable; state
+  is ephemeral until the DB layer is wired to D1). Next floor raised to `^16.3.3`
+  (OpenNext peer requirement). Runbook + caveats in `docs/CLOUDFLARE.md`.
 
 # v0.5.55 (2026-08-14)
 

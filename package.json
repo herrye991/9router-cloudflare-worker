@@ -13,6 +13,9 @@
     "dev:bun": "bun --bun next dev --webpack --port 20127",
     "build:bun": "bun --bun next build --webpack",
     "start:bun": "bun ./.next/standalone/custom-server.js",
+    "build:cf": "CF_WORKER_BUILD=true opennextjs-cloudflare build",
+    "preview:cf": "CF_WORKER_BUILD=true opennextjs-cloudflare preview",
+    "deploy:cf": "CF_WORKER_BUILD=true opennextjs-cloudflare deploy",
     "cli:pack": "npm --prefix cli run pack:cli",
     "cli:publish": "npm --prefix cli run publish:cli"
   },
@@ -34,7 +37,7 @@
     "marked": "^18.0.1",
     "material-symbols": "^0.44.6",
     "monaco-editor": "^0.55.1",
-    "next": "^16.1.6",
+    "next": "^16.3.3",
     "node-forge": "^1.3.3",
     "node-machine-id": "^1.1.12",
     "open": "^11.0.0",
@@ -56,10 +59,13 @@
   },
   "comment_better_sqlite3": "kept in optionalDependencies so npm install doesn't fail on systems without build tools — sql.js is used as fallback at runtime",
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.4",
     "@tailwindcss/postcss": "^4.1.18",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.3.3",
     "postcss": "^8.5.6",
-    "tailwindcss": "^4"
-  }
+    "tailwindcss": "^4",
+    "wrangler": "^4.127.0"
+  },
+  "comment_opennext": "@opennextjs/cloudflare + wrangler are only needed to build/deploy the app to Cloudflare Workers (npm run build:cf). They require next >= 16.3.3. The Next floor was raised to ^16.3.3 for this; the Node/Docker build is unaffected. Windows: the build:cf scripts set CF_WORKER_BUILD inline (POSIX) — use WSL or `cross-env` on Windows."
 }

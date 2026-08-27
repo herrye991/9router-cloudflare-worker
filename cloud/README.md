@@ -115,6 +115,29 @@ Legacy keys (`sk-{random8}`, no embedded machineId) must call the
 
 Schema changes: add a new file under `migrations/` and run `npm run db:migrate`.
 
+## CI/CD (GitHub Actions)
+
+`.github/workflows/cloudflare-worker.yml` validates and deploys the worker.
+
+- **Validate** (push / PR / manual): syntax-checks `cloud/` sources and runs the
+  embeddings contract test (`tests/unit/embeddings.cloud.test.js`).
+- **Deploy** (push to `main`/`master` only — never on PRs, so secrets stay safe):
+  deploys the default worker via `cloudflare/wrangler-action`. Manual dispatch can
+  target the **edge** gateway and/or apply D1 migrations.
+
+One-time repo setup (**Settings → Secrets and variables → Actions**):
+
+| Kind     | Name                    | Value / how to get it                                    |
+| -------- | ----------------------- | -------------------------------------------------------- |
+| Secret   | `CLOUDFLARE_API_TOKEN`  | Cloudflare API token with **Workers Scripts: Edit** + **D1: Edit** |
+| Secret   | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (dashboard right sidebar)          |
+| Secret   | `API_KEY_SECRET`        | Must match the app's `API_KEY_SECRET`                    |
+| Variable | `D1_DATABASE_ID`        | `database_id` from `cd cloud && npm run db:create`        |
+
+The workflow injects `D1_DATABASE_ID` into `wrangler.toml` at deploy time, so the
+placeholder UUID in git is fine. Migrations are **not** applied on every push — trigger
+the workflow manually with `applyMigrations: true` (or run `npm run db:migrate` locally).
+
 ## Notes & limits
 
 - Secrets are never written to `wrangler.toml` — use `wrangler secret put` / `.dev.vars`.
