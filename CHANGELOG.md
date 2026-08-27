@@ -1,3 +1,15 @@
+# Unreleased
+
+## Features
+- **Cloud**: add the `cloud/` Cloudflare Worker — a D1-backed cloud-sync backend plus
+  an opt-in edge LLM proxy. Ships `wrangler.toml` (+ `wrangler.edge.toml`), managed D1
+  migrations (`cloud/migrations/`), a dependency-light default worker (health +
+  `/sync/{machineId}` + API-key auth) that deploys with `wrangler deploy`, and an
+  edge bundle (`build.mjs`) that reuses the `open-sse` engine for `/v1/embeddings`.
+  Auth reuses the app's `sk-{machineId}-{keyId}-{crc8}` key format (set
+  `API_KEY_SECRET` to match). Implements the `cloud/src/handlers/embeddings.js`
+  contract referenced by `tests/unit/embeddings.cloud.test.js`.
+
 # v0.5.55 (2026-08-14)
 
 ## Features

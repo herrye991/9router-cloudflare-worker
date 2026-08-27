@@ -1,0 +1,23 @@
+{
+  "name": "9router-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "9Router Cloudflare Worker — D1-backed cloud-sync backend + optional edge LLM proxy",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "db:create": "wrangler d1 create 9router-cloud",
+    "db:migrate": "wrangler d1 migrations apply DB --remote",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:shell": "wrangler d1 execute DB --remote --command \"SELECT name FROM sqlite_master WHERE type='table'\"",
+    "build:edge": "node build.mjs",
+    "dev:edge": "node build.mjs && wrangler dev --config wrangler.edge.toml",
+    "deploy:edge": "node build.mjs && wrangler deploy --config wrangler.edge.toml"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "wrangler": "^4.0.0"
+  }
+}
