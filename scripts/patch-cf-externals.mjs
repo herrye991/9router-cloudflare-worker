@@ -47,6 +47,11 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(join(dirname(fileURLToPath(import.meta.url)), ".."));
 
+// When invoked with `--post-build`, only inject the fs polyfill into the
+// already-generated .open-next/worker.js (the stub patching was done earlier
+// via the `buildCommand` in open-next.config.ts, before OpenNext bundled).
+const postBuildOnly = process.argv.includes("--post-build");
+
 // Modules that Next.js hard-codes as webpack externals for the Node
 // server build but that are NOT available in the Workers runtime.
 // `bun:sqlite` is the one that breaks the OpenNext esbuild bundle;
@@ -55,6 +60,22 @@ const projectRoot = resolve(join(dirname(fileURLToPath(import.meta.url)), ".."))
 // their `require()` stubs would otherwise be left as unresolved
 // bare requires in the final Worker bundle).
 const EXTERNAL_MODULES = ["bun:sqlite", "node:sqlite", "better-sqlite3"];
+
+// `fs` is a Node.js builtin that webpack also externals (even with the alias
+// in next.config.mjs). In Workers (unenv), `fs.mkdirSync` / `fs.writeFileSync`
+// / `fs.existsSync` throw "not implemented yet" — and several app modules
+// call them at module-load time, crashing every page. We patch the
+// `require("fs")` webpack stub to return a proxy that no-ops those methods
+// while passing through the rest (readFileSync etc. work fine in Workers).
+// The stub format after esbuild minification is:
+//   `<id>:<param>=>{"use strict";<param>.exports=require("fs")}`
+// where <param> can be `a`, `a2`, etc. — we match any single-letter+digit param.
+// Match only webpack external stubs: `<param>.exports=require("fs")` where
+// <param> is a short identifier (a, a2, b, etc.) — NOT our replacement code
+// (which uses `__f`). The negative lookahead avoids matching our own injected
+// `var __f=require("fs")` inside the replacement.
+const fsStubRegex = /([a-z]\w?)\.exports=require\("fs"\)(?!["\w])/g;
+const fsStubReplacement = (param) => `${param}.exports=(function(){var __f=require("fs");["mkdirSync","writeFileSync","appendFileSync","unlinkSync","renameSync","chmodSync","chownSync","copyFileSync","rmSync","rmdirSync"].forEach(function(m){try{__f[m]=function(){}}catch(e){}});["existsSync","accessSync"].forEach(function(m){try{__f[m]=function(){return false}}catch(e){}});return __f})()`;
 
 // Build a single regex that matches the webpack external stub for any
 // of the target modules, e.g.:
@@ -79,7 +100,13 @@ function patchFile(filePath) {
     return 0;
   }
   let count = 0;
-  const patched = content.replace(stubRegex, (_match, modName) => {
+  // Patch fs external stub: no-op mkdirSync/writeFileSync/existsSync etc.
+  const fsPatched = content.replace(fsStubRegex, (_match, param) => {
+    count++;
+    return fsStubReplacement(param);
+  });
+  // Patch bun:sqlite / node:sqlite / better-sqlite3 external stubs.
+  const patched = fsPatched.replace(stubRegex, (_match, modName) => {
     count++;
     // Replace the `a.exports=require("mod")` stub with a getter that
     // throws. Using Object.defineProperty keeps the same `a` object
@@ -118,13 +145,39 @@ function patchDir(dir) {
 const targets = [
   join(projectRoot, ".next", "server"),
   join(projectRoot, ".next", "standalone", ".next", "server"),
+  // OpenNext copies traced files here before esbuild bundling — the esbuild
+  // output (handler.mjs) also contains the webpack external stubs.
+  join(projectRoot, ".open-next", "server-functions", "default", ".next", "server"),
 ];
 
 let grandTotal = 0;
-for (const dir of targets) {
-  const n = patchDir(dir);
-  if (n > 0) console.log(`[patch-cf-externals] Patched ${n} stub(s) in ${dir}`);
+
+// The esbuild-bundled outputs are produced by OpenNext AFTER copying the
+// traced files. The esbuild bundle inlines the webpack external stubs verbatim.
+// These are patched in BOTH modes (pre-build via buildCommand, and post-build).
+const bundledFiles = [
+  join(projectRoot, ".open-next", "server-functions", "default", "handler.mjs"),
+  join(projectRoot, ".open-next", "middleware", "handler.mjs"),
+];
+for (const f of bundledFiles) {
+  const n = patchFile(f);
+  if (n > 0) console.log(`[patch-cf-externals] Patched ${n} stub(s) in ${f}`);
   grandTotal += n;
+}
+
+// In the default (pre-build) mode, also patch the .next/server source files
+// before OpenNext copies them. In --post-build mode, skip this (already done).
+if (!postBuildOnly) {
+  const targets = [
+    join(projectRoot, ".next", "server"),
+    join(projectRoot, ".next", "standalone", ".next", "server"),
+    join(projectRoot, ".open-next", "server-functions", "default", ".next", "server"),
+  ];
+  for (const dir of targets) {
+    const n = patchDir(dir);
+    if (n > 0) console.log(`[patch-cf-externals] Patched ${n} stub(s) in ${dir}`);
+    grandTotal += n;
+  }
 }
 
 if (grandTotal === 0) {

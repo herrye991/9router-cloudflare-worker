@@ -60,6 +60,7 @@ const nextConfig = {
     // These throw a clear, catchable error if actually invoked at the edge.
     if (isCfBuild) {
       const edgeStub = join(projectRoot, "open-next/shims/node-stub.js");
+      const fsPolyfill = join(projectRoot, "open-next/shims/fs-polyfill.js");
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
         child_process: edgeStub,
@@ -71,6 +72,11 @@ const nextConfig = {
         open: edgeStub,
         "socks-proxy-agent": edgeStub,
         "got-scraping": edgeStub,
+        // fs polyfill: wraps node:fs and no-ops mkdirSync/writeFileSync/existsSync
+        // (unenv does not implement them; several app modules call them at module
+        // load time and crash every page without this shim).
+        fs: fsPolyfill,
+        "node:fs": fsPolyfill,
       };
     }
     // Exclude non-source dirs from watcher to reduce inotify load
