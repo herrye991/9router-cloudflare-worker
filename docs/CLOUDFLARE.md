@@ -94,7 +94,23 @@ companion worker via `cloudflare/wrangler-action@v3`:
 1. `npm install`
 2. `npm run build:cf` (OpenNext build → `.open-next/`) — **gate**
 3. cloud worker contract tests
-4. `cloudflare/wrangler-action@v3` `deploy` + maps the app secrets.
+4. `cloudflare/wrangler-action@v3` `deploy` + maps the companion worker secrets.
+
+**`deploy-app`** (needs `build-app`, non-PR only) deploys the **full app**
+(`9router-app`) to its own workers.dev subdomain:
+
+1. `npm install`
+2. `npm run deploy:cf` — `opennextjs-cloudflare deploy` (build + bundle +
+   `wrangler deploy` of the root `wrangler.toml` → `9router-app`)
+3. sets the app runtime secrets (`JWT_SECRET`, `INITIAL_PASSWORD`,
+   `API_KEY_SECRET`, `MACHINE_ID_SALT`) on `9router-app`.
+
+> ⚠️ `9router-app` and `9router-cloud` are **separate workers with separate
+> `*.workers.dev` subdomains**. The login page/dashboard live on
+> `https://9router-app.<account-subdomain>.workers.dev`. The
+> `9router-cloud.<account-subdomain>.workers.dev` subdomain only serves the JSON
+> health/sync/embeddings API (it has no dashboard) — seeing that JSON at the
+> `9router-cloud` URL is expected, not a bug.
 
 Repo setup (**Settings → Secrets and variables → Actions**):
 
@@ -102,7 +118,7 @@ Repo setup (**Settings → Secrets and variables → Actions**):
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | Workers edit token |
 | `CLOUDFLARE_ACCOUNT_ID` | account ID |
-| `JWT_SECRET`, `INITIAL_PASSWORD`, `API_KEY_SECRET`, `MACHINE_ID_SALT` | app runtime secrets |
+| `JWT_SECRET`, `INITIAL_PASSWORD`, `API_KEY_SECRET`, `MACHINE_ID_SALT` | app runtime secrets (used by `deploy-app`) |
 
 > Note: adding/editing files under `.github/workflows/` via Git requires the token to
 > have the **workflows** permission. If `git push` is rejected for the workflow file,
