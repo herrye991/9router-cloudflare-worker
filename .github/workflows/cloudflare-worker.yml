@@ -9,6 +9,7 @@ name: Cloudflare Worker
 #   Secrets:   CLOUDFLARE_API_TOKEN   (Workers edit token)
 #              CLOUDFLARE_ACCOUNT_ID
 #              API_KEY_SECRET         (MUST match the app's API_KEY_SECRET)
+#              JWT_SECRET, INITIAL_PASSWORD, MACHINE_ID_SALT  (full-app secrets, see docs/CLOUDFLARE.md)
 #   Variables: D1_DATABASE_ID         (from `cd cloud && npm run db:create`)
 
 on:
@@ -181,3 +182,52 @@ jobs:
             API_KEY_SECRET
         env:
           API_KEY_SECRET: ${{ secrets.API_KEY_SECRET }}
+
+  # ── Full app (9router-app) ────────────────────────────────────────────────
+  # The OpenNext build (build-app) is only a GATE — it does NOT deploy. This job
+  # actually deploys the full Next.js app (login page + dashboard) to its own
+  # workers.dev subdomain: https://9router-app.<account-subdomain>.workers.dev
+  # (the companion 9router-cloud worker above serves a different subdomain and
+  # only exposes the JSON health/sync/embeddings API — not the dashboard).
+  deploy-app:
+    name: Deploy full app (9router-app)
+    needs: build-app
+    # Never deploy from a PR (secrets must not reach forked code).
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # `deploy:cf` runs `opennextjs-cloudflare deploy`: it builds the worker
+      # (npm run build + scripts/patch-cf-externals.mjs via the buildCommand in
+      # open-next.config.ts) and then `wrangler deploy`s the root wrangler.toml
+      # (name = 9router-app). Requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.
+      - name: Build & deploy full app (OpenNext → Workers)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy:cf
+
+      # Set the app runtime secrets on 9router-app so login/dashboard work.
+      # Values are piped via stdin (never on the command line). These 4 secrets
+      # must exist in the repo Actions configuration (see docs/CLOUDFLARE.md).
+      - name: Set app secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          INITIAL_PASSWORD: ${{ secrets.INITIAL_PASSWORD }}
+          API_KEY_SECRET: ${{ secrets.API_KEY_SECRET }}
+          MACHINE_ID_SALT: ${{ secrets.MACHINE_ID_SALT }}
+        run: |
+          for s in JWT_SECRET INITIAL_PASSWORD API_KEY_SECRET MACHINE_ID_SALT; do
+            echo "Setting $s on 9router-app"
+            printf '%s' "${!s}" | npx wrangler secret put "$s" --name 9router-app || exit 1
+          done
