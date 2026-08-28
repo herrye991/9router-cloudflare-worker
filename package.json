@@ -13,7 +13,7 @@
     "dev:bun": "bun --bun next dev --webpack --port 20127",
     "build:bun": "bun --bun next build --webpack",
     "start:bun": "bun ./.next/standalone/custom-server.js",
-    "build:cf": "CF_WORKER_BUILD=true opennextjs-cloudflare build",
+    "build:cf": "CF_WORKER_BUILD=true opennextjs-cloudflare build && node scripts/patch-cf-externals.mjs --post-build",
     "preview:cf": "CF_WORKER_BUILD=true opennextjs-cloudflare preview",
     "deploy:cf": "CF_WORKER_BUILD=true opennextjs-cloudflare deploy",
     "cli:pack": "npm --prefix cli run pack:cli",

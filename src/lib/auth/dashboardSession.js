@@ -14,10 +14,19 @@ function loadJwtSecret() {
   try {
     return fs.readFileSync(file, "utf8").trim();
   } catch {}
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const generated = crypto.randomBytes(32).toString("hex");
-  fs.writeFileSync(file, generated, { mode: 0o600 });
-  return generated;
+  // Guarded: in the Cloudflare Workers runtime (OpenNext edge build) fs.mkdirSync
+  // and fs.writeFileSync are not implemented (unenv). Without JWT_SECRET set as
+  // a Worker secret, this would throw at module load time and crash every page.
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const generated = crypto.randomBytes(32).toString("hex");
+    fs.writeFileSync(file, generated, { mode: 0o600 });
+    return generated;
+  } catch {
+    // Workers / non-Node runtimes — return a random ephemeral secret.
+    // State is ephemeral at the edge anyway (no persistent fs).
+    return crypto.randomBytes(32).toString("hex");
+  }
 }
 
 const SECRET = new TextEncoder().encode(loadJwtSecret());
