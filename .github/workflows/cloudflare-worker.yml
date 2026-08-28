@@ -17,11 +17,28 @@ on:
     paths:
       - "cloud/**"
       - ".github/workflows/cloudflare-worker.yml"
+      # The full-app OpenNext build (npm run build:cf) is validated whenever any
+      # source/config that affects it changes — catching regressions like the
+      # bun:sqlite esbuild resolution failure early.
+      - "src/**"
+      - "open-next/**"
+      - "open-next.config.ts"
+      - "next.config.mjs"
+      - "wrangler.toml"
+      - "package.json"
+      - "scripts/patch-cf-externals.mjs"
   pull_request:
     branches: [main, master]
     paths:
       - "cloud/**"
       - ".github/workflows/cloudflare-worker.yml"
+      - "src/**"
+      - "open-next/**"
+      - "open-next.config.ts"
+      - "next.config.mjs"
+      - "wrangler.toml"
+      - "package.json"
+      - "scripts/patch-cf-externals.mjs"
   workflow_dispatch:
     inputs:
       target:
@@ -39,8 +56,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build-app:
+    name: Build full app (OpenNext → Workers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Install with build scripts so better-sqlite3 native bindings compile
+      # (optional dep — sql.js is the runtime fallback, but the build traces it).
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # This is the gate that catches the `bun:sqlite` esbuild resolution error.
+      # `build:cf` runs `opennextjs-cloudflare build`, which in turn runs the
+      # `buildCommand` from open-next.config.ts (`npm run build && node
+      # scripts/patch-cf-externals.mjs`) and then bundles with esbuild. If the
+      # patch is missing or a new Node-only import surfaces, this step fails.
+      - name: Build for Cloudflare Workers
+        run: npm run build:cf
+
+      - name: Verify worker output
+        run: |
+          test -f .open-next/worker.js || { echo "::error::.open-next/worker.js was not produced"; exit 1; }
+          test -f .open-next/middleware/handler.mjs || { echo "::error::middleware handler was not produced"; exit 1; }
+          echo "OpenNext build OK — worker.js + middleware/handler.mjs present"
+
   test:
     name: Validate
+    needs: build-app
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
