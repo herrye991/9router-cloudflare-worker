@@ -18,9 +18,6 @@ on:
     paths:
       - "cloud/**"
       - ".github/workflows/cloudflare-worker.yml"
-      # The full-app OpenNext build (npm run build:cf) is validated whenever any
-      # source/config that affects it changes — catching regressions like the
-      # bun:sqlite esbuild resolution failure early.
       - "src/**"
       - "open-next/**"
       - "open-next.config.ts"
@@ -62,24 +59,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-
-      # Install with build scripts so better-sqlite3 native bindings compile
-      # (optional dep — sql.js is the runtime fallback, but the build traces it).
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-
-      # This is the gate that catches the `bun:sqlite` esbuild resolution error.
-      # `build:cf` runs `opennextjs-cloudflare build`, which in turn runs the
-      # `buildCommand` from open-next.config.ts (`npm run build && node
-      # scripts/patch-cf-externals.mjs`) and then bundles with esbuild. If the
-      # patch is missing or a new Node-only import surfaces, this step fails.
       - name: Build for Cloudflare Workers
         run: npm run build:cf
-
       - name: Verify worker output
         run: |
           test -f .open-next/worker.js || { echo "::error::.open-next/worker.js was not produced"; exit 1; }
@@ -92,11 +78,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-
       - name: Syntax-check worker sources
         working-directory: cloud
         run: |
@@ -105,11 +89,9 @@ jobs:
             | while IFS= read -r -d '' f; do node --check "$f"; done
           node --check build.mjs
           echo "syntax OK"
-
       - name: Install test deps
         working-directory: tests
         run: npm install --no-audit --no-fund
-
       - name: Run cloud worker contract tests
         working-directory: tests
         run: npx vitest run unit/embeddings.cloud.test.js
@@ -117,7 +99,6 @@ jobs:
   deploy:
     name: Deploy
     needs: test
-    # Never deploy from a PR (secrets must not reach forked code).
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     defaults:
@@ -125,29 +106,21 @@ jobs:
         working-directory: cloud
     steps:
       - uses: actions/checkout@v5
-
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-
-      # The default worker needs no build; the edge build bundles open-sse via esbuild.
       - name: Install worker deps (edge build only)
         if: inputs.target == 'edge'
         run: npm install --no-audit --no-fund
-
-      # wrangler.toml in git keeps a placeholder UUID; inject the real D1 database_id.
       - name: Configure D1 database id
         env:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
         run: |
           if [ -z "$D1_DATABASE_ID" ]; then
-            echo "::error::D1_DATABASE_ID is not set. Create the DB (cd cloud && npm run db:create), then add an Actions variable named D1_DATABASE_ID with the database_id."
+            echo "::error::D1_DATABASE_ID is not set. Create the DB, then add an Actions variable named D1_DATABASE_ID."
             exit 1
           fi
           sed -i "s/00000000-0000-0000-0000-000000000000/$D1_DATABASE_ID/g" wrangler.toml wrangler.edge.toml
-
-      # Migrations are deliberate — only run them when explicitly requested.
-      # (If this ever hangs on an interactive prompt, run `npm run db:migrate` locally instead.)
       - name: Apply D1 migrations (remote)
         if: inputs.applyMigrations
         uses: cloudflare/wrangler-action@v3
@@ -156,7 +129,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: cloud
           command: d1 migrations apply DB --remote
-
       - name: Deploy worker (default)
         if: inputs.target != 'edge'
         uses: cloudflare/wrangler-action@v3
@@ -169,7 +141,6 @@ jobs:
             API_KEY_SECRET
         env:
           API_KEY_SECRET: ${{ secrets.API_KEY_SECRET }}
-
       - name: Deploy edge gateway
         if: inputs.target == 'edge'
         uses: cloudflare/wrangler-action@v3
@@ -183,41 +154,25 @@ jobs:
         env:
           API_KEY_SECRET: ${{ secrets.API_KEY_SECRET }}
 
-  # ── Full app (9router-app) ────────────────────────────────────────────────
-  # The OpenNext build (build-app) is only a GATE — it does NOT deploy. This job
-  # actually deploys the full Next.js app (login page + dashboard) to its own
-  # workers.dev subdomain: https://9router-app.<account-subdomain>.workers.dev
-  # (the companion 9router-cloud worker above serves a different subdomain and
-  # only exposes the JSON health/sync/embeddings API — not the dashboard).
   deploy-app:
     name: Deploy full app (9router-app)
     needs: build-app
-    # Never deploy from a PR (secrets must not reach forked code).
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-
-      # `deploy:cf` runs `opennextjs-cloudflare deploy`: it builds the worker
-      # (npm run build + scripts/patch-cf-externals.mjs via the buildCommand in
-      # open-next.config.ts) and then `wrangler deploy`s the root wrangler.toml
-      # (name = 9router-app). Requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.
       - name: Build & deploy full app (OpenNext → Workers)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run deploy:cf
-
-      # Set the app runtime secrets on 9router-app so login/dashboard work.
-      # Values are piped via stdin (never on the command line). These 4 secrets
-      # must exist in the repo Actions configuration (see docs/CLOUDFLARE.md).
+        run: |
+          npm run build:cf
+          npm run deploy:cf
       - name: Set app secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
