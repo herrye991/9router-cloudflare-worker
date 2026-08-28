@@ -83,12 +83,18 @@ a D1 schema + storage layer you can reuse. The root `wrangler.toml` has a commen
 
 ## CI/CD
 
-`.github/workflows/cloudflare-app.yml` builds + deploys the app worker on push to
-`main`/`master` (when app source changes) or via manual dispatch:
+`.github/workflows/cloudflare-worker.yml` validates and deploys the Cloudflare
+deployables on push to `main`/`master` (when relevant source changes) or via manual
+dispatch. The `build-app` job runs `npm run build:cf` as a gate — it fails the CI if
+the OpenNext bundle can't be produced (e.g. a new Node-only import that esbuild
+can't resolve). The `test` job (which needs `build-app`) runs the cloud worker
+contract tests, and the `deploy` job (which needs `test`) deploys the `cloud/`
+companion worker via `cloudflare/wrangler-action@v3`:
 
 1. `npm install`
-2. `npm run build:cf` (OpenNext build → `.open-next/`)
-3. `cloudflare/wrangler-action@v3` `deploy` + maps the app secrets.
+2. `npm run build:cf` (OpenNext build → `.open-next/`) — **gate**
+3. cloud worker contract tests
+4. `cloudflare/wrangler-action@v3` `deploy` + maps the app secrets.
 
 Repo setup (**Settings → Secrets and variables → Actions**):
 
@@ -112,6 +118,36 @@ need stubbing. When it does:
    matching throwing export in `open-next/shims/node-stub.js`.
 3. Rebuild.
 
+### `Could not resolve "bun:sqlite"` (and `node:sqlite` / `better-sqlite3`)
+
+This is a special case that the `next.config.mjs` alias **cannot** fix on its own.
+Next.js hard-codes every `bun:*` module as a webpack "external" for the Node.js server
+build (`next/dist/build/handle-externals.js`: `request.startsWith("bun:")`), and
+`node:sqlite` / `better-sqlite3` are externals too. Webpack therefore emits stub
+modules `a.exports=require("bun:sqlite")` that survive into the compiled
+`middleware.js` and page chunks. Webpack evaluates `externals` *before*
+`resolve.alias`, so the alias in `next.config.mjs` never replaces the import.
+
+When OpenNext then re-bundles those files with **esbuild** (a separate step from the
+webpack build), esbuild cannot resolve `bun:sqlite` (a Bun-only built-in) and the
+build fails:
+
+```
+✘ [ERROR] Could not resolve "bun:sqlite"
+```
+
+The fix is `scripts/patch-cf-externals.mjs`, wired in via the `buildCommand` in
+`open-next.config.ts`. It runs right after `next build` (and before OpenNext copies
+the traced files) and rewrites the `require("bun:sqlite")` /
+`require("node:sqlite")` / `require("better-sqlite3")` stubs in every compiled
+server chunk to a throwing getter, so esbuild no longer needs to resolve them. At
+runtime the app's DB driver (`src/lib/db/driver.js`) already wraps these imports in
+try/catch and falls back to `sql.js`, so the throw is never reached in practice.
+
+If a **new** Node-only import surfaces in the esbuild step (not one of the three
+SQLite modules above), add it to `EXTERNAL_MODULES` in
+`scripts/patch-cf-externals.mjs` *and* to the alias map in `next.config.mjs`.
+
 If Next itself fails to compile under OpenNext, check `@opennextjs/cloudflare` release
 notes for Next 16.x support and pin `next` accordingly.
 
@@ -126,9 +162,10 @@ always-on dashboard/API where the degraded feature set is acceptable.
 
 | File | Purpose |
 | --- | --- |
-| `open-next.config.ts` | OpenNext Cloudflare config |
+| `open-next.config.ts` | OpenNext Cloudflare config (sets `buildCommand` to run the patch script after `next build`) |
 | `wrangler.toml` (root) | app worker definition (`.open-next/worker.js`, assets, nodejs_compat, D1 reserved) |
-| `open-next/shims/node-stub.js` | stubs for Node-only modules during the CF build |
+| `open-next/shims/node-stub.js` | stubs for Node-only modules during the CF build (webpack alias layer) |
+| `scripts/patch-cf-externals.mjs` | post-`next build` patch: rewrites `require("bun:sqlite")` / `require("node:sqlite")` / `require("better-sqlite3")` webpack external stubs to throwing getters so OpenNext's esbuild bundle resolves (see Troubleshooting) |
 | `next.config.mjs` (`CF_WORKER_BUILD` branch) | drops `standalone`, adjusts externals, adds the stub aliases |
 | `package.json` | `@opennextjs/cloudflare` + `wrangler` devDeps, `build:cf`/`preview:cf`/`deploy:cf` scripts, `next` floor ≥ 16.3.3 |
-| `.github/workflows/cloudflare-app.yml` | build + deploy CI |
+| `.github/workflows/cloudflare-worker.yml` | build + validate + deploy CI (`build-app` job runs `npm run build:cf` as a gate) |
