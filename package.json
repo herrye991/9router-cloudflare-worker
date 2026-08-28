@@ -67,5 +67,5 @@
     "tailwindcss": "^4",
     "wrangler": "^4.127.0"
   },
-  "comment_opennext": "@opennextjs/cloudflare + wrangler are only needed to build/deploy the app to Cloudflare Workers (npm run build:cf). They require next >= 16.3.3. The Next floor was raised to ^16.3.3 for this; the Node/Docker build is unaffected. Windows: the build:cf scripts set CF_WORKER_BUILD inline (POSIX) — use WSL or `cross-env` on Windows."
+  "comment_opennext": "@opennextjs/cloudflare + wrangler are only needed to build/deploy the app to Cloudflare Workers (npm run build:cf). They require next >= 16.3.3. The Next floor was raised to ^16.3.3 for this; the Node/Docker build is unaffected. Windows: the build:cf scripts set CF_WORKER_BUILD inline (POSIX) — use WSL or `cross-env` on Windows. [ci trigger]"
 }
