@@ -85,19 +85,18 @@ app.post("/v1/chat/completions", async (c) => {
   return response;
 });
 
-// ── Dashboard (static assets) ────────────────────────────────────────
-// Serve the SPA dashboard from public/ via the ASSETS binding.
-// This runs as the final fallback — API routes (/v1/*) are matched first by Hono.
+// ── Fallback: serve static assets or 404 for API ──────────────────────
+// Non-API paths fall through to the ASSETS binding (serves index.html for SPA).
+// API paths that didn't match any route get a proper 404.
 
-app.get("*", async (c) => {
-  // If it's an API path that wasn't matched, fall through to 404
+app.all("*", async (c) => {
   if (c.req.path.startsWith("/v1") || c.req.path.startsWith("/api")) {
     return errorResponse(
       HTTP_STATUS.NOT_FOUND,
       `Endpoint not found: ${c.req.method} ${c.req.path}`
     );
   }
-  // Serve static assets (index.html, style.css, app.js)
+  // Serve static assets (SPA dashboard)
   return c.env.ASSETS.fetch(c.req.raw);
 });
 
