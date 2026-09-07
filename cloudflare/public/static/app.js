@@ -55,6 +55,7 @@ function navigate(route) {
   if (window.innerWidth <= 768) {
     document.querySelector(".sidebar")?.classList.remove("open");
   }
+}
 
 // ── Main render ──
 function render() {
@@ -110,7 +111,6 @@ function pageContent(html) {
 
 function skeletonLines(n) {
   return Array(n).fill('<div class="skeleton skeleton-line"></div>').join("");
-}
 
 // ── Dashboard page ──
 async function renderDashboard() {
@@ -126,7 +126,7 @@ async function renderDashboard() {
     </div>
   `);
   try {
-    const health = await api.get("/");
+    const health = await api.get("/health");
     document.getElementById("health-check").textContent = JSON.stringify(health, null, 2);
   } catch (e) {
     document.getElementById("health-check").textContent = "Error: " + e.message;
@@ -139,7 +139,6 @@ async function renderDashboard() {
   document.getElementById("stat-providers").textContent = "—";
   document.getElementById("stat-combos").textContent = "—";
 }
-
 
 // ── Models page ──
 async function renderModels() {
@@ -166,6 +165,7 @@ async function renderModels() {
   }
 }
 
+
 // ── Providers page ──
 async function renderProviders() {
   pageContent(`<div class="card"><div class="card-header"><div class="card-title">Provider Connections</div></div><div id="providers-list">${skeletonLines(3)}</div></div>`);
@@ -180,6 +180,16 @@ async function renderProviders() {
       <div class="list-item">
         <div class="list-item-info">
           <span class="badge ${p.isActive ? "badge-success" : "badge-muted"} badge-dot">${p.provider}</span>
+          <div><div class="list-item-name">${p.name || p.provider}</div><div class="list-item-meta">${p.authType || "apikey"}</div></div>
+        </div>
+        <span class="badge ${p.isActive ? "badge-success" : "badge-muted"}">${p.isActive ? "Active" : "Inactive"}</span>
+      </div>
+    `).join("");
+    document.getElementById("providers-list").innerHTML = rows;
+  } catch (e) {
+    document.getElementById("providers-list").innerHTML = `<p style="color:var(--error)">No provider API on Worker. Use D1 directly or add connections via API.</p>`;
+  }
+}
 
 // ── Combos page ──
 async function renderCombos() {
@@ -205,6 +215,7 @@ async function renderCombos() {
   }
 }
 
+
 // ── Keys page ──
 async function renderKeys() {
   pageContent(`<div class="card"><div class="card-header"><div class="card-title">API Keys</div></div><div id="keys-list">${skeletonLines(3)}</div></div>`);
@@ -222,6 +233,13 @@ async function renderKeys() {
           <div><div class="list-item-name" style="font-family:monospace;font-size:12px">${k.key.slice(0,8)}••••${k.key.slice(-4)}</div></div>
         </div>
         <span class="badge ${k.isActive ? "badge-success" : "badge-muted"}">${k.isActive ? "Active" : "Inactive"}</span>
+      </div>
+    `).join("");
+    document.getElementById("keys-list").innerHTML = rows;
+  } catch (e) {
+    document.getElementById("keys-list").innerHTML = `<p style="color:var(--error)">No keys API on Worker.</p>`;
+  }
+}
 
 // ── Endpoint page ──
 async function renderEndpoint() {
@@ -246,6 +264,7 @@ async function renderEndpoint() {
   `);
 }
 
+
 // ── Settings page ──
 async function renderSettings() {
   pageContent(`
@@ -262,7 +281,7 @@ async function renderSettings() {
     </div>
   `);
   try {
-    const health = await api.get("/");
+    const health = await api.get("/health");
     document.getElementById("settings-info").textContent = JSON.stringify(health, null, 2);
   } catch (e) {
     document.getElementById("settings-info").textContent = "Error: " + e.message;
@@ -274,7 +293,6 @@ async function renderSettings() {
 
 // ── Init ──
 document.addEventListener("DOMContentLoaded", () => {
-  // Check hash for route
   const hash = window.location.hash.slice(1);
   if (hash && routes[hash]) currentRoute = hash;
   render();
@@ -283,24 +301,5 @@ document.addEventListener("DOMContentLoaded", () => {
     if (h && routes[h]) navigate(h);
   });
 });
-
-      </div>
-    `).join("");
-    document.getElementById("keys-list").innerHTML = rows;
-  } catch (e) {
-    document.getElementById("keys-list").innerHTML = `<p style="color:var(--error)">No keys API on Worker.</p>`;
-  }
-}
-
-          <div><div class="list-item-name">${p.name || p.provider}</div><div class="list-item-meta">${p.authType || "apikey"}</div></div>
-        </div>
-        <span class="badge ${p.isActive ? "badge-success" : "badge-muted"}">${p.isActive ? "Active" : "Inactive"}</span>
-      </div>
-    `).join("");
-    document.getElementById("providers-list").innerHTML = rows;
-  } catch (e) {
-    document.getElementById("providers-list").innerHTML = `<p style="color:var(--error)">No provider API on Worker. Use D1 directly or add connections via API.</p>`;
-  }
-}
 
 }
