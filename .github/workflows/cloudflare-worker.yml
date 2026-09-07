@@ -39,6 +39,13 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Inject D1 database id
+        env:
+          D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+        run: |
+          sed -i "s|<D1_DATABASE_ID>|${D1_DATABASE_ID}|" wrangler.jsonc
+          echo "Injected D1 database id into wrangler.jsonc"
+
       - name: Apply D1 migrations
         uses: cloudflare/wrangler-action@v3
         with:
@@ -54,7 +61,3 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: cloudflare
           command: deploy
-          preCommands: |
-            # Inject the real D1 database id into wrangler.jsonc so the deploy
-            # binds to the correct remote database instead of the placeholder.
-            sed -i "s|<D1_DATABASE_ID>|${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}|" wrangler.jsonc
