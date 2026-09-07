@@ -66,7 +66,7 @@ async function doLogin(e){
       authed = true;
       renderDashboard();
     } else {
-      err.innerHTML = `<div class="auth-error"><span class="material-symbols-outlined" style="font-size:14px">error</span>${data.error || "Invalid password"}</div>`;
+      err.innerHTML = `<div class="auth-error"><span class="material-symbols-outlined" style="font-size:14px">error</span>${typeof data.error === "string" ? data.error : (data.error?.message || JSON.stringify(data.error)) || "Invalid password"}</div>`;
     }
   } catch(ex){
     err.innerHTML = `<div class="auth-error"><span class="material-symbols-outlined" style="font-size:14px">error</span>Login not available on Worker</div>`;
@@ -207,6 +207,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   if(hash && navItems.find(n=>n.route===hash)) currentRoute = hash;
   try{
     const r = await fetch("/api/auth/status");
+    if(!r.ok) throw new Error("no auth");
     const data = await r.json();
     if(data.authenticated || data.requireLogin === false){
       authed = true;
