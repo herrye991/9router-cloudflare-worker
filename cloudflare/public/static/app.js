@@ -111,6 +111,7 @@ function pageContent(html) {
 
 function skeletonLines(n) {
   return Array(n).fill('<div class="skeleton skeleton-line"></div>').join("");
+}
 
 // ── Dashboard page ──
 async function renderDashboard() {
@@ -302,4 +303,3 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-}
