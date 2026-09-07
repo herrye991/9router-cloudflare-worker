@@ -1,0 +1,60 @@
+name: Deploy Cloudflare Worker
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "cloudflare/**"
+      - ".github/workflows/cloudflare-worker.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build & Deploy Worker
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cloudflare/package.json
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare
+          command: d1 migrations apply 9router-db --remote
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare
+          command: deploy
+          preCommands: |
+            # Inject the real D1 database id into wrangler.jsonc so the deploy
+            # binds to the correct remote database instead of the placeholder.
+            sed -i "s|<D1_DATABASE_ID>|${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}|" wrangler.jsonc
