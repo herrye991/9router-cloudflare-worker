@@ -1,0 +1,25 @@
+{
+  // 9Router Cloudflare Worker configuration
+  // D1 binding: replace <D1_DATABASE_ID> with the real ID after `npx wrangler d1 create 9router-db`
+  "name": "9router-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "9router-db",
+      "database_id": "<D1_DATABASE_ID>"
+    }
+  ],
+
+  "vars": {
+    "REQUIRE_API_KEY": "false",
+    "ADMIN_API_KEY": ""
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
