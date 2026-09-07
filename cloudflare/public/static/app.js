@@ -72,6 +72,7 @@ async function doLogin(e){
     err.innerHTML = `<div class="auth-error"><span class="material-symbols-outlined" style="font-size:14px">error</span>Login not available on Worker</div>`;
   }
   btn.disabled = false; btn.textContent = "Login";
+}
 
 // ── Dashboard shell ──
 function renderDashboard(){
@@ -103,7 +104,6 @@ function routeDesc(r){
   const d = {endpoint:"Your API endpoint URL, keys, and usage examples",providers:"Manage provider connections",models:"Available models from your connections",combos:"Model fusion and fallback chains",usage:"Request statistics",settings:"Worker configuration"};
   return d[r] || "";
 }
-
 
 // ── Pages ──
 const pages = {
@@ -157,7 +157,6 @@ async function renderModels(){
   }catch(e){el("mod-list").innerHTML=`<p style="color:var(--danger)">${e.message}</p>`}
 }
 
-
 async function renderCombos(){
   setContent(`<div class="card"><div class="card-header"><div class="card-title"><span class="material-symbols-outlined">layers</span>Combos</div></div><div id="combo-list">${skel(3)}</div></div>`);
   try{
@@ -206,7 +205,6 @@ async function renderSettings(){
 document.addEventListener("DOMContentLoaded", async ()=>{
   const hash = window.location.hash.slice(1);
   if(hash && navItems.find(n=>n.route===hash)) currentRoute = hash;
-  // Check auth status
   try{
     const r = await fetch("/api/auth/status");
     const data = await r.json();
@@ -217,7 +215,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
       renderLogin();
     }
   } catch(e){
-    // No auth API on Worker — go straight to dashboard
     authed = true;
     renderDashboard();
   }
@@ -226,5 +223,3 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     if(h && navItems.find(n=>n.route===h)) navigate(h);
   });
 });
-
-}
