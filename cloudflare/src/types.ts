@@ -3,9 +3,10 @@
  * All types are Cloudflare-native (no Node/Bun types).
  */
 
-/** Cloudflare Worker bindings — D1 + env vars. */
+/** Cloudflare Worker bindings — D1 + env vars + static assets. */
 export interface Env {
   DB: D1Database;
+  ASSETS: Fetcher;
   REQUIRE_API_KEY?: string;
   ADMIN_API_KEY?: string;
 }
